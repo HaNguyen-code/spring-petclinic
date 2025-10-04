@@ -302,7 +302,6 @@
 			<format>ALL</format>
 			<failBuildOnCVSS>7.0</failBuildOnCVSS>
 			<dataDirectory>${env.DC_CACHE_DIR}</dataDirectory>
-			<nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
 		  </configuration>
 		  <executions>
 			<execution>
