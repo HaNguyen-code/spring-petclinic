@@ -19,7 +19,9 @@ pipeline {
 				junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
 
 				echo 'Running Integration Tests (Failsafe/Testcontainers)'
-				sh './mvnw -B verify -DskipTests=true -DskipITs=false'
+				withCredentials([string(credentialsId: 'NVD_API_KEY', variable: 'NVD_API_KEY')]) {
+					sh './mvnw -B verify -DskipTests=true -DskipITs=false'
+				}
 				junit allowEmptyResults: true, testResults: '**/target/failsafe-reports/*.xml'
 			}
 		}
@@ -48,7 +50,7 @@ pipeline {
 					[ -n "$NVD_API_KEY" ] || { echo "NVD_API_KEY missing"; exit 1; }
 					./mvnw -B -DskipTests \
 					  org.owasp:dependency-check-maven:aggregate \
-					  -DdataDirectory="${WORKSPACE}@tmp/dc-cache" \
+					  -DdataDirectory="$DC_CACHE_DIR" \
 					  -Dformat=ALL -DfailBuildOnCVSS=9.0 \
 					  -DnvdApiKey="$NVD_API_KEY"
 				'''				
