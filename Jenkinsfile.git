@@ -45,6 +45,7 @@ pipeline {
 			echo 'Security Scan with OWASP DC'
 			withCredentials([string(credentialsId: 'NVD_API_KEY', variable: 'NVD_API_KEY')]) {
 				sh '''
+					[ -n "$NVD_API_KEY" ] || { echo "NVD_API_KEY missing"; exit 1; }
 					./mvnw -B -DskipTests \
 					  org.owasp:dependency-check-maven:aggregate \
 					  -DdataDirectory="${WORKSPACE}@tmp/dc-cache" \
@@ -52,12 +53,10 @@ pipeline {
 					  -DnvdApiKey="$NVD_API_KEY"
 				'''				
 			}
-			// If you installed the Jenkins "OWASP Dependency-Check" publisher:
 			dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-			// Always good to archive:
 			archiveArtifacts artifacts: '**/dependency-check-report.*', allowEmptyArchive: true
 		  }
-		}
+		}		
 		stage('Deployment') {
 		  steps {
 			echo 'Build a Docker image locally via Paketo buildpacks'
