@@ -18,7 +18,7 @@ pipeline {
 				sh './mvnw -B test -DskipITs=true'
 				junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
 
-				echo 'Running Integration Tests (Failsafe/Testcontainers)'
+				echo 'Running Integration Tests (Failsafe)'
 				withCredentials([string(credentialsId: 'NVD_API_KEY', variable: 'NVD_API_KEY')]) {
 					sh './mvnw -B verify -DskipTests=true -DskipITs=false'
 				}
