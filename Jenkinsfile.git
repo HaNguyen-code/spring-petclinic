@@ -1,0 +1,105 @@
+pipeline {
+    agent any
+	
+    stages {
+        stage('Build') {
+            steps {
+				echo 'Checkout SCM'
+                git branch: 'main', url: 'https://github.com/HaNguyen-code/spring-petclinic.git'
+                echo 'Build code with Maven'
+                sh './mvnw -B -U -T 1C clean package -DskipTests'
+                echo 'Archive build artifacts'
+                archiveArtifacts artifacts: '**/target/*.jar,**/target/*.war', onlyIfSuccessful: true
+            }
+        }
+		stage('Test') {
+			steps {
+				echo 'Running Unit Tests (Surefire)'
+				sh './mvnw -B test -DskipITs=true'
+				junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
+
+				echo 'Running Integration Tests (Failsafe/Testcontainers)'
+				sh './mvnw -B verify -DskipTests=true -DskipITs=false'
+				junit allowEmptyResults: true, testResults: '**/target/failsafe-reports/*.xml'
+			}
+		}
+		stage('Code Quality Analysis') {
+			steps {
+				echo 'Code Quality Analysis with SonarQube'
+				withSonarQubeEnv('SonarCloud') {
+					sh """
+						./mvnw -B -DskipTests \
+						  sonar:sonar \
+						  -Dsonar.projectKey=HaNguyen-code_spring-petclinic \
+						  -Dsonar.organization=hanguyen-code \
+						  -Dsonar.host.url=https://sonarcloud.io
+					"""
+					}
+			}
+		}
+		stage('Security Scan') {
+		  environment {
+			DC_CACHE_DIR = "${WORKSPACE}@tmp/dc-cache"
+		  }
+		  steps {
+			echo 'Security Scan with OWASP DC'
+			withCredentials([string(credentialsId: 'NVD_API_KEY', variable: 'NVD_API_KEY')]) {
+				sh '''
+					./mvnw -B -DskipTests \
+					  org.owasp:dependency-check-maven:aggregate \
+					  -DdataDirectory="${WORKSPACE}@tmp/dc-cache" \
+					  -Dformat=ALL -DfailBuildOnCVSS=9.0 \
+					  -DnvdApiKey="$NVD_API_KEY"
+				'''				
+			}
+			// If you installed the Jenkins "OWASP Dependency-Check" publisher:
+			dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+			// Always good to archive:
+			archiveArtifacts artifacts: '**/dependency-check-report.*', allowEmptyArchive: true
+		  }
+		}
+		stage('Deployment') {
+		  steps {
+			echo 'Build a Docker image locally via Paketo buildpacks'
+			sh '''
+			  ./mvnw -DskipTests \
+				-Dspring-boot.build-image.imageName=jessica686/petclinic:${BUILD_NUMBER} \
+				spring-boot:build-image
+			'''		
+			echo 'Push the Docker image to Docker Hub'
+			withCredentials([usernamePassword(
+				credentialsId: 'docker-hub-creds',
+				usernameVariable: 'DOCKER_USER',
+				passwordVariable: 'DOCKER_PASS'
+			)]) {
+				sh '''
+					echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+					docker push jessica686/petclinic:${BUILD_NUMBER}
+				'''
+			}
+			echo 'Pull the image and deploy a container'
+			sh '''
+			  IMAGE="jessica686/petclinic:${BUILD_NUMBER}"
+			  NAME="petclinic"
+			  HOST_PORT=8081
+			  APP_PORT=8080
+
+			  # Pull (ok if it already exists locally)
+			  docker pull "$IMAGE" || true
+
+			  # Stop & remove old container if it exists
+			  docker rm -f "$NAME" 2>/dev/null || true
+
+			  # Run new container
+			  docker run -d --name "$NAME" --restart unless-stopped \
+				-p ${HOST_PORT}:${APP_PORT} \
+				$NET \
+				"$IMAGE"
+
+			  docker ps --filter "name=$NAME"
+			  echo "Petclinic should be reachable on http://localhost:${HOST_PORT}/"
+			'''			
+		  }
+		}
+	}
+}
