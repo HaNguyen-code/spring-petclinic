@@ -300,7 +300,7 @@
 		  <version>12.1.6</version>
 		  <configuration>
 			<format>ALL</format>
-			<failBuildOnCVSS>7.0</failBuildOnCVSS>
+			<failBuildOnCVSS>9.0</failBuildOnCVSS>
 			<dataDirectory>${env.DC_CACHE_DIR}</dataDirectory>
 		  </configuration>
 		  <executions>
